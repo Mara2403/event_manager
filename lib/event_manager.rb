@@ -1,6 +1,7 @@
 require 'csv'
 require 'google/apis/civicinfo_v2'
 require 'erb'
+require 'date'
 
 def clean_zipcode(zipcode)
   zipcode.to_s.rjust(5,"0")[0..4]
@@ -55,12 +56,15 @@ contents = CSV.open(
 template_letter = File.read('form_letter.erb')
 erb_template = ERB.new template_letter
 
+regdate_strings = []
 contents.each do |row|
   id = row[0]
   name = row[:first_name]
   zipcode = clean_zipcode(row[:zipcode])
   legislators = legislators_by_zipcode(zipcode)
   phone = clean_phone_number(row[:homephone])
+  registration_by_hour = row[:regdate]
+  regdate_strings << registration_by_hour
 
   if phone
     puts "#{name} #{zipcode} #{phone}"
@@ -69,5 +73,31 @@ contents.each do |row|
   end
   form_letter = erb_template.result(binding)
 
-  save_thank_you_letter(id,form_letter)
+  save_thank_you_letter(id, form_letter)
 end
+
+date_times = regdate_strings.map { |date_time| DateTime.strptime(date_time, '%m/%d/%y %H:%M') }
+# for the check up, to manually count it and see is it is true
+# date_times.each do |date_time|
+#   puts date_time.strftime("%A")
+# end
+
+grouped_by_day = date_times.group_by { |dt| dt.strftime('%A') }
+
+# Find the maximum number of registrations
+max_registrations = grouped_by_day.values.map(&:length).max
+
+# Find all days with the maximum number of registrations by day
+most_common_days = grouped_by_day.select { |_, dates| dates.length == max_registrations }.keys
+
+# Output the most common days
+puts "The most common registration day of the week is: #{most_common_days.map(&:capitalize).join(', ')}."
+
+# Similar by hour
+grouped_by_hour = date_times.group_by { |hour| hour.strftime('%H') }
+
+max_registrations = grouped_by_hour.values.map(&:length).max
+
+most_common_hours = grouped_by_hour.select { |_, hour| hour.length == max_registrations }.keys
+
+puts "The most common registration hour is: #{most_common_hours.map(&:capitalize).join(', ')}."
